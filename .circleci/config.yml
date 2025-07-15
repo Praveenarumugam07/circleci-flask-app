@@ -1,0 +1,39 @@
+version: 2.1
+
+jobs:
+  deploy:
+    docker:
+      - image: google/cloud-sdk:latest
+
+    steps:
+      - checkout
+
+      - run:
+          name: Install sshpass
+          command: |
+            apt-get update
+            apt-get install -y sshpass
+
+      - run:
+          name: Authenticate with GCP
+          command: |
+            echo "$GCP_SA_KEY" > sa-key.json
+            gcloud auth activate-service-account --key-file=sa-key.json
+            gcloud config set project $GCP_PROJECT_ID
+            gcloud compute config-ssh
+
+      - run:
+          name: Copy files to VM
+          command: |
+            gcloud compute scp --recurse . $USER@$VM_NAME:~/ --zone=$VM_ZONE --quiet
+
+      - run:
+          name: Deploy Application
+          command: |
+            gcloud compute ssh $USER@$VM_NAME --zone=$VM_ZONE --command="cd ~/ && pip3 install -r requirements.txt && pkill -f app.py || true && nohup python3 app.py &"
+
+workflows:
+  version: 2
+  deploy_workflow:
+    jobs:
+      - deploy
